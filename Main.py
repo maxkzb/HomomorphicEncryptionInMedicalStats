@@ -15,107 +15,214 @@ context.generate_galois_keys()
 context.global_scale = 2 ** 40
 
 
-class MedicalDashboard:
+class SecureMedicalApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Secure Medical Data Manager")
-        self.root.geometry("1000x700")
+        self.root.title("Privacy-Preserving Medical System")
+        self.root.geometry("1150x750")
 
+        # Load Dataset
         self.FILENAME = "heart_disease_uci.csv"
-        self.df = self.load_data()
-
-        self.setup_layout()
-
-    def load_data(self):
         try:
-            df = pd.read_csv(self.FILENAME, na_values=['?'])
-            df['age'] = pd.to_numeric(df['age'], errors='coerce').fillna(df['age'].median())
-            df['num'] = pd.to_numeric(df['num'], errors='coerce').fillna(0)
-            return df
+            self.df = pd.read_csv(self.FILENAME, na_values=['?'])
+            self.df['age'] = pd.to_numeric(self.df['age'], errors='coerce').fillna(self.df['age'].median())
+            self.df['num'] = pd.to_numeric(self.df['num'], errors='coerce').fillna(0)
+            self.df['trestbps'] = pd.to_numeric(self.df['trestbps'], errors='coerce').fillna("N/A")
+            self.df['chol'] = pd.to_numeric(self.df['chol'], errors='coerce').fillna("N/A")
+            self.clinics = ["All Clinics"] + sorted(self.df['dataset'].unique().tolist())
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load {self.FILENAME}\n{e}")
-            return pd.DataFrame()
+            messagebox.showerror("Critical Error", f"Could not load {self.FILENAME}\n{e}")
+            self.root.destroy()
 
-    def setup_layout(self):
-        header = tk.Frame(self.root, bg="#2c3e50", height=60)
+        self.show_login_panel()
+
+    def clear_screen(self):
+        """Clears all widgets from the root window for fresh transitions."""
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+    # --- SCREEN 1: LOGIN PANEL ---
+    def show_login_panel(self):
+        self.clear_screen()
+        self.root.geometry("400x550")
+        tk.Label(self.root, text="🛡️ Secure Portal", font=("Helvetica", 24, "bold")).pack(pady=40)
+
+        p_frame = tk.LabelFrame(self.root, text="Patient Login", padx=20, pady=20)
+        p_frame.pack(pady=10, fill="x", padx=40)
+
+        tk.Label(p_frame, text="Enter Patient ID:").pack()
+        self.patient_id_entry = tk.Entry(p_frame, justify='center', bg="white", fg="black", insertbackground="black",
+                                         highlightthickness=1)
+        self.patient_id_entry.pack(pady=5)
+        self.patient_id_entry.insert(0, "1")
+
+        tk.Button(p_frame, text="View My Results", command=self.login_as_patient, highlightbackground="#d1d1d1").pack(
+            fill="x", pady=10)
+
+        tk.Label(self.root, text="— OR —", fg="gray").pack(pady=10)
+
+        d_frame = tk.LabelFrame(self.root, text="Medical Staff", padx=20, pady=20)
+        d_frame.pack(pady=10, fill="x", padx=40)
+        tk.Button(d_frame, text="Login as Doctor", command=self.show_doctor_dashboard,
+                  highlightbackground="#d1d1d1").pack(fill="x", pady=5)
+
+    def login_as_patient(self):
+        try:
+            p_id = int(self.patient_id_entry.get())
+            if p_id in self.df['id'].values:
+                self.show_patient_results(p_id)
+            else:
+                messagebox.showerror("Error", "Patient ID not found.")
+        except ValueError:
+            messagebox.showerror("Error", "Please enter a numeric ID.")
+
+    # --- SCREEN 2: PATIENT RESULTS ---
+    def show_patient_results(self, p_id):
+        self.clear_screen()
+        self.root.geometry("500x550")
+        row = self.df[self.df['id'] == p_id].iloc[0]
+
+        tk.Label(self.root, text=f"Patient Record: #{p_id}", font=("Helvetica", 18, "bold")).pack(pady=20)
+
+        details_frame = tk.Frame(self.root, relief="groove", borderwidth=2, padx=20, pady=20)
+        details_frame.pack(pady=10, padx=30, fill="both")
+
+        status = "Heart Disease Detected" if row['num'] > 0 else "Clear / Healthy"
+        color = "#c0392b" if row['num'] > 0 else "#27ae60"
+
+        fields = [("Age:", int(row['age'])), ("Sex:", row['sex']), ("Clinic:", row['dataset']),
+                  ("BP:", f"{row['trestbps']} mmHg"), ("Cholesterol:", f"{row['chol']} mg/dL"), ("Status:", status)]
+
+        for label, value in fields:
+            f = tk.Frame(details_frame)
+            f.pack(fill="x", pady=5)
+            tk.Label(f, text=label, font=("Helvetica", 11, "bold")).pack(side="left")
+            tk.Label(f, text=str(value), font=("Helvetica", 11), fg=color if "Status" in label else "black").pack(
+                side="right")
+
+        tk.Button(self.root, text="← Logout", command=self.show_login_panel).pack(pady=30)
+
+    # --- SCREEN 3: DOCTOR DASHBOARD ---
+    def show_doctor_dashboard(self):
+        self.clear_screen()
+        self.root.geometry("1150x750")
+
+        header = tk.Frame(self.root, bg="#2c3e50")
         header.pack(fill="x")
-        tk.Label(header, text="Medical Records & Privacy-Preserving Analytics",
-                 fg="white", bg="#2c3e50", font=("Helvetica", 16, "bold")).pack(pady=15)
+        tk.Label(header, text="Doctor's Administrative Dashboard", fg="white", bg="#2c3e50",
+                 font=("Helvetica", 16)).pack(pady=15)
 
         main_frame = tk.Frame(self.root)
         main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        list_frame = tk.LabelFrame(main_frame, text="Patient Database", font=("Helvetica", 10, "bold"))
-        list_frame.pack(side="left", fill="both", expand=True, padx=5)
+        # LEFT SIDE: Browser & Filters
+        left_side = tk.Frame(main_frame)
+        left_side.pack(side="left", fill="both", expand=True)
 
-        self.tree = ttk.Treeview(list_frame, columns=("ID", "Age", "Sex", "Clinic"), show='headings')
-        self.tree.heading("ID", text="Patient ID")
-        self.tree.heading("Age", text="Age")
-        self.tree.heading("Sex", text="Gender")
-        self.tree.heading("Clinic", text="Clinic")
-        self.tree.column("ID", width=70)
-        self.tree.column("Age", width=50)
+        filter_frame = tk.Frame(left_side)
+        filter_frame.pack(fill="x", pady=5)
 
-        scb = ttk.Scrollbar(list_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscroll=scb.set)
+        # ID Search
+        tk.Label(filter_frame, text="Search ID:").pack(side="left", padx=2)
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", lambda *args: self.update_treeview())
+        tk.Entry(filter_frame, textvariable=self.search_var, bg="white", fg="black", width=10).pack(side="left", padx=5)
 
+        # Clinic Filter
+        tk.Label(filter_frame, text="Clinic:").pack(side="left", padx=2)
+        self.clinic_filter = ttk.Combobox(filter_frame, values=self.clinics, state="readonly", width=12)
+        self.clinic_filter.set("All Clinics")
+        self.clinic_filter.bind("<<ComboboxSelected>>", lambda e: self.update_treeview())
+        self.clinic_filter.pack(side="left", padx=5)
+
+        # Diagnosis Filter
+        tk.Label(filter_frame, text="Status:").pack(side="left", padx=2)
+        self.diag_filter = ttk.Combobox(filter_frame, values=["All", "Healthy", "Disease"], state="readonly", width=10)
+        self.diag_filter.set("All")
+        self.diag_filter.bind("<<ComboboxSelected>>", lambda e: self.update_treeview())
+        self.diag_filter.pack(side="left", padx=5)
+
+        # Table
+        list_frame = tk.LabelFrame(left_side, text="Patient Database", padx=5, pady=5)
+        list_frame.pack(fill="both", expand=True)
+
+        cols = ("ID", "Age", "Sex", "Clinic", "Diagnosis")
+        self.tree = ttk.Treeview(list_frame, columns=cols, show='headings')
+        for col in cols: self.tree.heading(col, text=col)
+        self.tree.column("ID", width=60);
+        self.tree.column("Age", width=60)
+
+        tree_scb = ttk.Scrollbar(list_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscroll=tree_scb.set)
         self.tree.pack(side="left", fill="both", expand=True)
-        scb.pack(side="right", fill="y")
+        tree_scb.pack(side="right", fill="y")
+        self.tree.bind("<<TreeviewSelect>>", self.on_doctor_select_patient)
 
-        for _, row in self.df.iterrows():
-            self.tree.insert("", "end", values=(int(row['id']), int(row['age']), row['sex'], row['dataset']))
+        # RIGHT SIDE: Analysis
+        right_side = tk.Frame(main_frame, width=380)
+        right_side.pack(side="right", fill="both", expand=False, padx=10)
+        right_side.pack_propagate(False)
 
-        self.tree.bind("<<TreeviewSelect>>", self.on_patient_select)
+        self.sel_frame = tk.LabelFrame(right_side, text="Selected Record Details", padx=10, pady=10)
+        self.sel_frame.pack(fill="x", pady=5)
+        self.sel_label = tk.Label(self.sel_frame, text="Select a patient\nfrom the database", justify="left",
+                                  font=("Courier", 10))
+        self.sel_label.pack()
 
-        right_frame = tk.Frame(main_frame)
-        right_frame.pack(side="right", fill="both", expand=True, padx=5)
+        he_frame = tk.LabelFrame(right_side, text="Secure Population Analytics (HE)", padx=10, pady=10)
+        he_frame.pack(fill="both", expand=True, pady=5)
 
-        self.detail_frame = tk.LabelFrame(right_frame, text="Patient Record Detail", font=("Helvetica", 10, "bold"),
-                                          padx=10, pady=10)
-        self.detail_frame.pack(fill="x", pady=5)
+        tk.Label(he_frame, text="🔐 Aggregating data across all clinics\nwhile remaining encrypted.",
+                 font=("Helvetica", 9, "italic")).pack()
 
-        self.detail_label = tk.Label(self.detail_frame, text="Select a patient from the list to view results.",
-                                     justify="left", font=("Helvetica", 11), wraplength=400)
-        self.detail_label.pack(anchor="w")
-
-        stats_frame = tk.LabelFrame(right_frame, text="Homomorphic Global Analytics", font=("Helvetica", 10, "bold"),
-                                    padx=10, pady=10)
-        stats_frame.pack(fill="both", expand=True, pady=5)
-
-        tk.Label(stats_frame, text="Perform system-wide statistics across all encrypted records.",
-                 font=("Helvetica", 9, "italic")).pack(pady=5)
-
-        self.btn_he = tk.Button(stats_frame, text="🚀 Run Secure Global Stats", command=self.run_he_thread,
-                                bg="#16a085", fg="white", font=("Helvetica", 11, "bold"), pady=10)
+        self.btn_he = tk.Button(he_frame, text="Compute Global Stats", command=self.run_he_thread)
         self.btn_he.pack(fill="x", pady=10)
 
-        self.progress = ttk.Progressbar(stats_frame, orient="horizontal", length=300, mode="determinate")
-        self.progress.pack(fill="x", pady=5)
+        self.pb = ttk.Progressbar(he_frame, mode="determinate")
+        self.pb.pack(fill="x", pady=5)
 
-        self.status_label = tk.Label(stats_frame, text="Status: Ready", fg="gray")
-        self.status_label.pack()
+        self.he_status = tk.Label(he_frame, text="Status: Ready", fg="gray")
+        self.he_status.pack()
 
-        self.stats_result_label = tk.Label(stats_frame, text="", font=("Courier", 10), justify="left", bg="#ecf0f1",
-                                           relief="sunken", pady=10)
-        self.stats_result_label.pack(fill="both", expand=True, pady=10)
+        self.he_results = tk.Label(he_frame, text="", font=("Courier", 10), justify="left", bg="#f4f4f4",
+                                   relief="sunken", pady=10, wraplength=340)
+        self.he_results.pack(fill="both", expand=True, pady=10)
 
-    def on_patient_select(self, event):
-        selected_item = self.tree.selection()[0]
-        p_id = self.tree.item(selected_item)['values'][0]
+        tk.Button(self.root, text="Logout", command=self.show_login_panel).pack(pady=10)
+        self.update_treeview()
 
+    def update_treeview(self):
+        query = self.search_var.get().lower()
+        filter_diag = self.diag_filter.get()
+        filter_clinic = self.clinic_filter.get()
+
+        self.tree.delete(*self.tree.get_children())
+
+        for _, row in self.df.iterrows():
+            diag_str = "Positive" if row['num'] > 0 else "Negative"
+
+            # Application of Filters
+            if query and query not in str(row['id']).lower(): continue
+            if filter_diag == "Healthy" and row['num'] > 0: continue
+            if filter_diag == "Disease" and row['num'] == 0: continue
+            if filter_clinic != "All Clinics" and row['dataset'] != filter_clinic: continue
+
+            self.tree.insert("", "end", values=(int(row['id']), int(row['age']), row['sex'], row['dataset'], diag_str))
+
+    def on_doctor_select_patient(self, event):
+        selected = self.tree.selection()
+        if not selected: return
+        p_id = self.tree.item(selected[0])['values'][0]
         row = self.df[self.df['id'] == p_id].iloc[0]
+        diag = "POSITIVE (Heart Issues)" if row['num'] > 0 else "NEGATIVE (Clear)"
 
-        diagnosis = "Positive (Heart Issues)" if row['num'] > 0 else "Negative (Normal)"
-
-        detail_text = (
-            f"IDENTIFIER:  Patient #{int(row['id'])}\n"
-            f"DEMOGRAPHICS: {row['age']} yr old {row['sex']}\n"
-            f"CLINIC:      {row['dataset']}\n"
-            f"BP/CHOL:     {row['trestbps']} mmHg / {row['chol']} mg/dL\n"
-            f"----------------------------------\n"
-            f"DIAGNOSIS:   {diagnosis}"
-        )
-        self.detail_label.config(text=detail_text, fg="#2980b9" if row['num'] == 0 else "#c0392b")
+        info = (f"PATIENT ID: {p_id}\n"
+                f"CLINIC:     {row['dataset']}\n"
+                f"AGE/SEX:    {int(row['age'])} / {row['sex']}\n"
+                f"BP:         {row['trestbps']}\n"
+                f"CHOL:       {row['chol']}\n"
+                f"DIAGNOSIS:  {diag}")
+        self.sel_label.config(text=info, fg="#c0392b" if row['num'] > 0 else "#27ae60")
 
     def run_he_thread(self):
         self.btn_he.config(state="disabled")
@@ -123,9 +230,8 @@ class MedicalDashboard:
 
     def perform_he(self):
         try:
-            self.status_label.config(text="Status: Encrypting 920 records...", fg="#e67e22")
-            self.progress['value'] = 20
-            time.sleep(1)
+            self.he_status.config(text="Status: 🔐 Encrypting records...", fg="#e67e22")
+            self.pb['value'] = 25
 
             ages = self.df['age'].tolist()
             disease = (self.df['num'] > 0).astype(float).tolist()
@@ -133,34 +239,27 @@ class MedicalDashboard:
             enc_ages = ts.ckks_vector(context, ages)
             enc_disease = ts.ckks_vector(context, disease)
 
-            self.progress['value'] = 60
-            self.status_label.config(text="Status: Computing on Ciphertext...", fg="#e67e22")
-            time.sleep(1.2)
+            self.he_status.config(text="Status: ⚙️ Computing on Ciphertext...", fg="#e67e22")
+            self.pb['value'] = 60
+            time.sleep(1)
 
             enc_avg_age = enc_ages.sum() * (1 / len(ages))
-            enc_total_disease = enc_disease.sum()
+            enc_total_dis = enc_disease.sum()
 
-            self.progress['value'] = 90
-            self.status_label.config(text="Status: Decrypting results...", fg="#e67e22")
-            time.sleep(0.8)
+            self.he_status.config(text="Status: 🔓 Final Decryption...", fg="#e67e22")
+            self.pb['value'] = 90
 
-            avg_age = enc_avg_age.decrypt()[0]
-            total_disease = round(enc_total_disease.decrypt()[0])
+            res_age = enc_avg_age.decrypt()[0]
+            res_dis = round(enc_total_dis.decrypt()[0])
 
-            self.progress['value'] = 100
-            self.status_label.config(text="Status: Analysis Complete", fg="green")
+            self.he_status.config(text="Status: ✅ Analysis Complete", fg="green")
+            self.pb['value'] = 100
 
-            result_text = (
-                f"=== GLOBAL HE RESULTS ===\n"
-                f"Total Population: {len(self.df)}\n"
-                f"Average Age:      {avg_age:.2f} yrs\n"
-                f"Total Diagnosed:  {total_disease}\n"
-                f"Prevalence:       {(total_disease / len(self.df)) * 100:.1f}%\n"
-                f"=========================="
-            )
-            self.stats_result_label.config(text=result_text)
-            messagebox.showinfo("Success", "Homomorphic computation finished securely.")
-
+            stats = (f"TOTAL PATIENTS: {len(self.df)}\n"
+                     f"AVERAGE AGE:    {res_age:.2f}\n"
+                     f"DISEASE COUNT:  {res_dis}\n"
+                     f"PREVALENCE:     {(res_dis / len(self.df)) * 100:.1f}%")
+            self.he_results.config(text=stats)
         except Exception as e:
             messagebox.showerror("HE Error", str(e))
         finally:
@@ -169,5 +268,5 @@ class MedicalDashboard:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = MedicalDashboard(root)
+    app = SecureMedicalApp(root)
     root.mainloop()
