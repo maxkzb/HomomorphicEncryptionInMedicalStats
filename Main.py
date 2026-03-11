@@ -6,6 +6,16 @@ from tkinter import ttk, messagebox
 import threading
 import time
 
+#functionalities
+#1) performing secure statistical operations using he (for patients count, average age, disease count, and prevalence)
+#2) patient can view his results
+#3) doctor can view his patients results + stats
+#4) work only on encrypted data and allow the doctor to write new patients or
+# change existing patients data and save it already encrypted !
+# , but then generating of the key would be problematic because it should be done only once and then reuse it?
+# maybe just save the key somewhere but then is it really safe?
+
+
 context = ts.context(
     ts.SCHEME_TYPE.CKKS,
     poly_modulus_degree=8192,
