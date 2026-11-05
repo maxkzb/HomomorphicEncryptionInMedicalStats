@@ -1,4 +1,3 @@
-import pandas as pd
 import tenseal as ts
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
@@ -9,13 +8,14 @@ import base64
 import hashlib
 import time
 from datetime import datetime
+from statistics import median
 from simple_keystore import SimpleKeyStore
 
 
 class PureHEMedicalApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Pure HE Vault - Thesis Final Edition")
+        self.root.title("MedStat-HE")
         self.center_window(1300, 850)
 
         self.DB_FILE = "he_longitudinal_vault.pkl"
@@ -36,7 +36,7 @@ class PureHEMedicalApp:
         # Ensure Treeview rows are nicely spaced
         style.configure("Treeview", rowheight=25, font=('Arial', 10))
         style.configure("Treeview.Heading", font=('Arial', 10, 'bold'))
-        style.configure("TLabelframe.Label", font=('Arial', 11, 'bold'), foreground="#2c3e50")
+        style.configure("TLabelframe.Label", font=('Arial', 11, 'bold'), foreground="#333333")
 
     def center_window(self, width, height):
         # Get the screen width and height
@@ -61,7 +61,7 @@ class PureHEMedicalApp:
         self.root.withdraw()
 
         if not os.path.exists(self.KEYSTORE_FILE) or not os.path.exists(self.DB_FILE):
-            pwd = simpledialog.askstring("New Keystore", "Create Master Password to generate Dual-HE Vault:", show='*')
+            pwd = simpledialog.askstring("Create vault", "Choose a master password for the encrypted vault.", show='*')
             if not pwd: self.root.destroy(); return
 
             os.environ['SIMPLE_KEYSTORE_KEY'] = self.get_keystore_token(pwd)
@@ -82,9 +82,9 @@ class PureHEMedicalApp:
             ks.add_key(name="sk_bfv", unencrypted_key=ctx_bfv.serialize(save_secret_key=True).hex())
 
             self.encrypt_raw_to_disk()
-            messagebox.showinfo("Setup Complete", "Dual-Algorithm Vault generated successfully.")
+            messagebox.showinfo("Setup complete", "The encrypted vault is ready.")
         else:
-            pwd = simpledialog.askstring("Unlock Keystore", "Enter Master Vault Password:", show='*')
+            pwd = simpledialog.askstring("Unlock vault", "Enter the master password.", show='*')
             if not pwd: self.root.destroy(); return
 
             try:
@@ -94,7 +94,7 @@ class PureHEMedicalApp:
                 self.he_context_bfv = ts.context_from(bytes.fromhex(ks.get_key_by_name("sk_bfv")))
                 self.load_he_vectors()
             except Exception as e:
-                messagebox.showerror("Auth Failed", f"Incorrect Password or Keystore error.\n{e}")
+                messagebox.showerror("Could not unlock vault", f"Check the master password and keystore.\n{e}")
                 self.root.destroy();
                 return
 
@@ -102,6 +102,8 @@ class PureHEMedicalApp:
         self.show_login_panel()
 
     def encrypt_raw_to_disk(self):
+        import pandas as pd
+
         try:
             df = pd.read_csv(self.RAW_FILE, na_values=['?'])
         except FileNotFoundError:
@@ -163,9 +165,9 @@ class PureHEMedicalApp:
     def show_login_panel(self):
         self.clear_screen()
         self.center_window(600, 650)
-        tk.Label(self.root, text="🛡️ Secure HE Vault Portal", font=("Arial", 24, "bold"), fg="#2c3e50").pack(pady=30)
+        tk.Label(self.root, text="MedStat-HE — Login", font=("Arial", 22, "bold"), fg="#333333").pack(pady=30)
 
-        p_frame = ttk.LabelFrame(self.root, text="Patient Access", padding=20)
+        p_frame = ttk.LabelFrame(self.root, text="Patient access", padding=20)
         p_frame.pack(pady=10, fill="x", padx=60)
         tk.Label(p_frame, text="Patient ID:").grid(row=0, column=0, pady=5, sticky="e")
         self.p_login_id = ttk.Entry(p_frame, width=20);
@@ -173,12 +175,12 @@ class PureHEMedicalApp:
         tk.Label(p_frame, text="Password:").grid(row=1, column=0, pady=5, sticky="e")
         self.p_login_pwd = ttk.Entry(p_frame, width=20, show="*");
         self.p_login_pwd.grid(row=1, column=1, pady=5)
-        tk.Button(p_frame, text="Login as Patient", command=self.auth_patient, bg="#3498db", fg="black").grid(row=2,
+        tk.Button(p_frame, text="Log in as patient", command=self.auth_patient).grid(row=2,
                                                                                                               column=0,
                                                                                                               columnspan=2,
                                                                                                               pady=10)
 
-        d_frame = ttk.LabelFrame(self.root, text="Medical Staff", padding=20)
+        d_frame = ttk.LabelFrame(self.root, text="Medical staff", padding=20)
         d_frame.pack(pady=20, fill="x", padx=60)
         tk.Label(d_frame, text="Username:").grid(row=0, column=0, pady=5, sticky="e")
         self.d_login_usr = ttk.Entry(d_frame, width=20);
@@ -186,7 +188,7 @@ class PureHEMedicalApp:
         tk.Label(d_frame, text="Password:").grid(row=1, column=0, pady=5, sticky="e")
         self.d_login_pwd = ttk.Entry(d_frame, width=20, show="*");
         self.d_login_pwd.grid(row=1, column=1, pady=5)
-        tk.Button(d_frame, text="Login as Doctor", command=self.auth_doctor, bg="#2ecc71", fg="black").grid(row=2,
+        tk.Button(d_frame, text="Log in as doctor", command=self.auth_doctor).grid(row=2,
                                                                                                             column=0,
                                                                                                             columnspan=2,
                                                                                                             pady=10)
@@ -201,9 +203,9 @@ class PureHEMedicalApp:
             if p_id in self.plain_columns['auth'] and self.plain_columns['auth'][p_id] == self.hash_password(pwd):
                 self.show_patient_view(p_id)
             else:
-                messagebox.showerror("Denied", "Incorrect Credentials.")
+                messagebox.showerror("Login failed", "Check your patient ID and password.")
         except ValueError:
-            messagebox.showerror("Error", "Enter numeric ID.")
+            messagebox.showerror("Invalid patient ID", "Enter a numeric patient ID.")
 
     def auth_doctor(self):
         usr = self.d_login_usr.get()
@@ -211,16 +213,16 @@ class PureHEMedicalApp:
         if usr in self.plain_columns['auth'] and self.plain_columns['auth'][usr] == self.hash_password(pwd):
             self.show_doctor_dashboard()
         else:
-            messagebox.showerror("Denied", "Invalid Credentials.")
+            messagebox.showerror("Login failed", "Check your username and password.")
 
     def show_patient_view(self, p_id):
         self.clear_screen()
         patient_indices = [i for i, x in enumerate(self.plain_columns['id']) if x == p_id]
-        tk.Label(self.root, text=f"Historical Record: Patient #{p_id}", font=("Helvetica", 18, "bold")).pack(pady=10)
+        tk.Label(self.root, text=f"Medical records for patient {p_id}", font=("Arial", 18, "bold")).pack(pady=10)
 
         cols = ("Date", "Age", "Clinic", "BP", "Chol", "Diagnosis")
         tree = ttk.Treeview(self.root, columns=cols, show='headings', height=6)
-        for col in cols: tree.heading(col, text=col); tree.column(col, width=100, anchor="center")
+        for col in cols: tree.heading(col, text={"BP": "Blood pressure", "Chol": "Cholesterol"}.get(col, col)); tree.column(col, width=100, anchor="center")
         tree.pack(pady=10, padx=40, fill="x")
 
         ages = self.enc_columns_ckks['age'].decrypt()
@@ -230,31 +232,31 @@ class PureHEMedicalApp:
 
         patient_records = []
         for idx in patient_indices:
-            sick = "DISEASE" if nums[idx] > 0.5 else "HEALTHY"
+            sick = "Positive" if nums[idx] > 0.5 else "Negative"
             patient_records.append((self.plain_columns['date'][idx], round(ages[idx]),
                                     self.plain_columns['dataset'][idx], round(bps[idx]), round(chols[idx]), sick))
 
         patient_records.sort(key=lambda x: x[0], reverse=True)
         for rec in patient_records: tree.insert("", "end", values=rec)
 
-        tk.Label(self.root, text="Clinical History Notes:", font=("Helvetica", 12, "bold")).pack(pady=(10, 0))
+        tk.Label(self.root, text="Clinical notes", font=("Arial", 12, "bold")).pack(pady=(10, 0))
         hist_box = tk.Text(self.root, height=8, width=70, bg="#f4f4f4", wrap=tk.WORD, font=("Arial", 10))
         hist_box.pack(pady=5)
         for note in self.plain_columns['history'][p_id]:
             hist_box.insert(tk.END, note + "\n\n")
         hist_box.config(state="disabled")
 
-        tk.Button(self.root, text="Logout", command=self.show_login_panel, width=15).pack(pady=15)
+        tk.Button(self.root, text="Log out", command=self.show_login_panel, width=15).pack(pady=15)
 
     # --- DOCTOR DASHBOARD ---
     def show_doctor_dashboard(self):
         self.clear_screen()
         self.center_window(1300, 850)
 
-        header = tk.Frame(self.root, bg="#2c3e50");
+        header = tk.Frame(self.root, bg="#333333");
         header.pack(fill="x")
-        tk.Label(header, text="Longitudinal EHR & HE Benchmarking", fg="white", bg="#2c3e50",
-                 font=("Helvetica", 16)).pack(pady=10)
+        tk.Label(header, text="Medical records and encrypted statistics", fg="white", bg="#333333",
+                 font=("Arial", 16, "bold")).pack(pady=10)
 
         main = tk.Frame(self.root);
         main.pack(fill="both", expand=True, padx=10, pady=5)
@@ -267,7 +269,7 @@ class PureHEMedicalApp:
         filter_frame = tk.Frame(left)
         filter_frame.pack(fill="x", pady=5)
 
-        tk.Label(filter_frame, text="🔍 ID:").pack(side="left")
+        tk.Label(filter_frame, text="Patient ID:").pack(side="left")
         self.flt_id = ttk.Entry(filter_frame, width=8)
         self.flt_id.pack(side="left", padx=5)
 
@@ -281,7 +283,7 @@ class PureHEMedicalApp:
         self.flt_diag.set("All");
         self.flt_diag.pack(side="left", padx=5)
 
-        tk.Button(filter_frame, text="Search", command=self.apply_filters, bg="#bdc3c7").pack(side="left", padx=5)
+        tk.Button(filter_frame, text="Search", command=self.apply_filters).pack(side="left", padx=5)
         tk.Button(filter_frame, text="Clear", command=self.clear_filters).pack(side="left")
 
         # Treeview UI
@@ -292,9 +294,9 @@ class PureHEMedicalApp:
 
         # POLISH: Centered columns
         for col in cols:
-            self.tree.heading(col, text=col)
+            self.tree.heading(col, text={"BP": "Blood pressure", "Chol": "Cholesterol"}.get(col, col))
             # Make the ID and Date columns slightly wider, center everything else
-            w = 90 if col in ["Date", "Clinic", "Diagnosis"] else 70
+            w = 95 if col in ["Date", "Clinic", "BP", "Chol", "Diagnosis"] else 70
             self.tree.column(col, width=w, anchor="center")
 
         scb = ttk.Scrollbar(left, orient="vertical", command=self.tree.yview)
@@ -312,54 +314,44 @@ class PureHEMedicalApp:
         right.pack(side="right", fill="both", padx=10)
         right.pack_propagate(False)
 
-        hist_frame = ttk.LabelFrame(right, text="Patient History & Notes", padding=10)
+        hist_frame = ttk.LabelFrame(right, text="Patient history", padding=10)
         hist_frame.pack(fill="x", pady=5)
 
-        self.lbl_selected_id = tk.Label(hist_frame, text="Select a visit from the table to view.", fg="gray",
+        self.lbl_selected_id = tk.Label(hist_frame, text="Select a patient to view their history.", fg="#444444",
                                         font=("Arial", 10, "bold"))
         self.lbl_selected_id.pack(pady=2)
 
-        self.txt_history = tk.Text(hist_frame, height=7, width=45, bg="#f4f4f4", font=("Arial", 9), wrap=tk.WORD)
+        self.txt_history = tk.Text(hist_frame, height=7, width=45, bg="#f4f4f4", font=("Arial", 10), wrap=tk.WORD)
         self.txt_history.pack(pady=5)
         self.txt_history.config(state="disabled")
 
-        tk.Label(hist_frame, text="Append New Note:").pack(anchor="w")
+        tk.Label(hist_frame, text="Add clinical note").pack(anchor="w")
         self.txt_new_note = tk.Text(hist_frame, height=3, width=45, wrap=tk.WORD)
         self.txt_new_note.pack(pady=2)
 
-        tk.Button(hist_frame, text="Save Note to Vault", command=self.append_history).pack(pady=5)
+        tk.Button(hist_frame, text="Save note", command=self.append_history).pack(pady=5)
 
-        he_frame = ttk.LabelFrame(right, text="📊 Algorithm Benchmarking Suite", padding=15)
+        he_frame = ttk.LabelFrame(right, text="Statistical analysis", padding=15)
         he_frame.pack(fill="x", pady=10)
 
-        tk.Label(he_frame, text="1. Select Metric:").grid(row=0, column=0, pady=5, sticky="e")
-        self.metric_choice = ttk.Combobox(he_frame, values=["age", "trestbps", "chol", "num"], state="readonly",
-                                          width=18)
-        self.metric_choice.set("trestbps");
+        tk.Label(he_frame, text="Statistic").grid(row=0, column=0, pady=5, sticky="e")
+        self.metric_choice = ttk.Combobox(
+            he_frame, values=["Age", "Resting blood pressure", "Cholesterol"], state="readonly", width=24
+        )
+        self.metric_choice.current(1)
         self.metric_choice.grid(row=0, column=1, pady=5, padx=5)
 
-        tk.Label(he_frame, text="2. Select Algorithm:").grid(row=1, column=0, pady=5, sticky="e")
-        self.algo_choice = ttk.Combobox(he_frame, values=["CKKS (Approximate)", "BFV (Exact Integer)"],
-                                        state="readonly", width=18)
-        self.algo_choice.set("CKKS (Approximate)");
-        self.algo_choice.grid(row=1, column=1, pady=5, padx=5)
-
-        # POLISH: Clear old results when dropdowns change
         self.metric_choice.bind("<<ComboboxSelected>>", self.clear_bench_results)
-        self.algo_choice.bind("<<ComboboxSelected>>", self.clear_bench_results)
 
-        tk.Button(he_frame, text="▶ Run Benchmark", command=self.run_he_benchmark, bg="#e74c3c", fg="black").grid(row=2,
-                                                                                                                  column=0,
-                                                                                                                  columnspan=2,
-                                                                                                                  pady=15)
+        tk.Button(he_frame, text="Run comparison", command=self.run_he_benchmark).grid(row=1, column=0, columnspan=2, pady=15)
 
-        self.res_lab = tk.Label(he_frame, text="Result: --", font=("Arial", 12, "bold"), fg="#2980b9")
-        self.res_lab.grid(row=3, column=0, columnspan=2, pady=5)
+        self.res_lab = tk.Label(he_frame, text="Result: --", font=("Arial", 11, "bold"), fg="#222222", justify="left")
+        self.res_lab.grid(row=2, column=0, columnspan=2, pady=5, sticky="w")
 
-        self.time_lab = tk.Label(he_frame, text="Time: -- ms", font=("Courier", 10))
-        self.time_lab.grid(row=4, column=0, columnspan=2, pady=5)
+        self.time_lab = tk.Label(he_frame, text="Median execution time (5 runs): --", font=("Arial", 10), fg="#222222", justify="left")
+        self.time_lab.grid(row=3, column=0, columnspan=2, pady=5, sticky="w")
 
-        tk.Button(self.root, text="Logout", command=self.show_login_panel, width=15).pack(pady=10)
+        tk.Button(self.root, text="Log out", command=self.show_login_panel, width=15).pack(pady=10)
 
     # --- FILTERING METHODS ---
     def clear_filters(self):
@@ -376,9 +368,8 @@ class PureHEMedicalApp:
         threading.Thread(target=self.populate_doctor_table, args=(f_id, f_sex, f_diag), daemon=True).start()
 
     def clear_bench_results(self, event):
-        """Prevents displaying stale data when user changes the dropdown options."""
-        self.res_lab.config(text="Result: --")
-        self.time_lab.config(text="Time: -- ms")
+        self.res_lab.config(text="Result: --", fg="#222222")
+        self.time_lab.config(text="Median execution time (5 runs): --")
 
     def on_doctor_select(self, event):
         sel = self.tree.selection()
@@ -386,7 +377,7 @@ class PureHEMedicalApp:
 
         try:
             self.cur_selected_id = self.tree.item(sel[0])['values'][1]
-            self.lbl_selected_id.config(text=f"Selected Patient: #{self.cur_selected_id}", fg="black")
+            self.lbl_selected_id.config(text=f"Patient {self.cur_selected_id}", fg="black")
 
             self.txt_history.config(state="normal")
             self.txt_history.delete("1.0", tk.END)
@@ -399,7 +390,7 @@ class PureHEMedicalApp:
 
     def append_history(self):
         if not hasattr(self, 'cur_selected_id'):
-            messagebox.showwarning("Warning", "Select a patient first.");
+            messagebox.showwarning("No patient selected", "Select a patient before saving a note.");
             return
 
         note = self.txt_new_note.get("1.0", tk.END).strip()
@@ -417,7 +408,7 @@ class PureHEMedicalApp:
         self.txt_history.see(tk.END)
         self.txt_history.config(state="disabled")
 
-        messagebox.showinfo("Success", f"Note appended to Patient #{self.cur_selected_id}.")
+        messagebox.showinfo("Note saved", f"The note was added to patient {self.cur_selected_id}’s history.")
 
     # --- UPDATED TREEVIEW WITH FILTERING ---
     def populate_doctor_table(self, f_id="", f_sex="All", f_diag="All"):
@@ -447,7 +438,7 @@ class PureHEMedicalApp:
             self.tree.delete(*self.tree.get_children())
             for p_id, visits in grouped_records.items():
                 visits.sort(key=lambda x: x[0], reverse=True)
-                parent_node = self.tree.insert("", "end", text="➕", values=visits[0], open=False)
+                parent_node = self.tree.insert("", "end", values=visits[0], open=False)
                 for older_visit in visits[1:]:
                     child_record = list(older_visit)
                     child_record[0] = f" ↳ {child_record[0]}"
@@ -456,35 +447,39 @@ class PureHEMedicalApp:
         self.root.after(0, update_ui)
 
     def run_he_benchmark(self):
-        metric = self.metric_choice.get()
-        algo = self.algo_choice.get()
+        metric = {"Age": "age", "Resting blood pressure": "trestbps", "Cholesterol": "chol"}[self.metric_choice.get()]
         total_visits = len(self.plain_columns['id'])
+        self.clear_bench_results(None)
+        if not total_visits:
+            self.res_lab.config(text="No visits available for comparison.")
+            return
 
-        self.res_lab.config(text="Calculating...", fg="orange")
-        self.root.update()  # Force UI refresh
+        self.res_lab.config(text="Calculating...", fg="#444444")
+        self.root.update_idletasks()
 
-        start_time = time.time()
+        ckks_vector = self.enc_columns_ckks[metric]
+        bfv_vector = self.enc_columns_bfv[metric]
+        ckks_times, bfv_times = [], []
+        for _ in range(5):
+            start = time.perf_counter()
+            ckks_mean = (ckks_vector.sum() * (1 / total_visits)).decrypt()[0]
+            ckks_times.append((time.perf_counter() - start) * 1000)
 
-        if "CKKS" in algo:
-            enc_vec = self.enc_columns_ckks[metric]
-            enc_average = enc_vec.sum() * (1 / total_visits)
-            final_answer = enc_average.decrypt()[0]
+            start = time.perf_counter()
+            bfv_mean = bfv_vector.sum().decrypt()[0] / total_visits
+            bfv_times.append((time.perf_counter() - start) * 1000)
 
-        elif "BFV" in algo:
-            enc_vec = self.enc_columns_bfv[metric]
-            enc_sum = enc_vec.sum()
-            decrypted_sum = enc_sum.decrypt()[0]
-            final_answer = decrypted_sum / total_visits
-
-        execution_time = (time.time() - start_time) * 1000
-
-        # Update UI
-        if metric == 'num':
-            self.res_lab.config(text=f"Global Prevalence: {final_answer * 100:.2f}%", fg="#2980b9")
-        else:
-            self.res_lab.config(text=f"Global Avg {metric.upper()}: {final_answer:.2f}", fg="#2980b9")
-
-        self.time_lab.config(text=f"Execution Time: {execution_time:.2f} ms")
+        self.res_lab.config(
+            text=f"CKKS result: {ckks_mean:.6f}\n"
+                 f"BFV result: {bfv_mean:.6f}\n"
+                 f"Absolute difference: {abs(ckks_mean - bfv_mean):.3g}",
+            fg="#222222",
+        )
+        self.time_lab.config(
+            text=f"Median execution time (5 runs)\n"
+                 f"CKKS: {median(ckks_times):.2f} ms\n"
+                 f"BFV: {median(bfv_times):.2f} ms"
+        )
 
 
 if __name__ == "__main__":
